@@ -1,15 +1,14 @@
-"""
-This module takes care of starting the API Server, Loading the DB and Adding the endpoints
-"""
 import os
 from flask import Flask, request, jsonify, url_for, send_from_directory
 from flask_migrate import Migrate
+from flask_bcrypt import Bcrypt
 from flask_swagger import swagger
 from api.utils import APIException, generate_sitemap
 from api.models import db
 from api.routes import api
 from api.admin import setup_admin
 from api.commands import setup_commands
+from api.routes import bcrypt
 
 # from models import Person
 
@@ -18,6 +17,7 @@ static_file_dir = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), '../dist/')
 app = Flask(__name__)
 app.url_map.strict_slashes = False
+bcrypt.init_app(app)
 
 # database condiguration
 db_url = os.getenv("DATABASE_URL")
@@ -30,6 +30,7 @@ else:
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 MIGRATE = Migrate(app, db, compare_type=True)
 db.init_app(app)
+app.config["SECRET_KEY"]= os.getenv("SECRET_KEY")
 
 # add the admin
 setup_admin(app)
