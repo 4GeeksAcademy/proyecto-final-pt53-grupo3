@@ -1,52 +1,66 @@
-import React, { useEffect } from "react"
-import rigoImageUrl from "../assets/img/rigo-baby.jpg";
+import React, { useEffect } from "react";
 import useGlobalReducer from "../hooks/useGlobalReducer.jsx";
+import { NoteGrid } from "../components/NotesGrid.jsx";
+import { useNavigate } from "react-router-dom";
 
 export const Home = () => {
+  const { store, dispatch } = useGlobalReducer();
+  const navigate = useNavigate();
 
-	const { store, dispatch } = useGlobalReducer()
+  const loadNotes = async () => {
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL;
+      if (!backendUrl) throw new Error("VITE_BACKEND_URL is not defined in .env file");
 
-	const loadMessage = async () => {
-		try {
-			const backendUrl = import.meta.env.VITE_BACKEND_URL
+      const response = await fetch(backendUrl + "/api/notes");
+      const notes = await response.json();
 
-			if (!backendUrl) throw new Error("VITE_BACKEND_URL is not defined in .env file")
+      if (response.ok) {
+        dispatch({ type: "set_notes", payload: notes });
+      }
 
-			const response = await fetch(backendUrl + "/api/hello")
-			const data = await response.json()
+      return notes;
+    } catch (error) {
+      console.error("Error loading notes:", error);
+    }
+  };
 
-			if (response.ok) dispatch({ type: "set_hello", payload: data.message })
+  useEffect(() => {
+    loadNotes();
+  }, []);
 
-			return data
+  return (
+    <main className="container-fluid flex-grow-1 py-4">
+      <div className="container">
+        <div className="text-center mb-5">
+          <h1 className="display-4">Welcome to NotesApp</h1>
+          <p className="lead">Share your thoughts with the community</p>
+        </div>
 
-		} catch (error) {
-			if (error.message) throw new Error(
-				`Could not fetch the message from the backend.
-				Please check if the backend is running and the backend port is public.`
-			);
-		}
+        <div className="mb-4">
+          <div className="d-flex justify-content-between align-items-center mb-4">
+            <h2>Community Notes</h2>
+            <small className="text-muted">
+              {store.notes ? `${store.notes.length} notes` : 'Loading...'}
+            </small>
+          </div>
+          
+          <NoteGrid 
+            notes={store.notes} 
+            loading={!store.notes}
+          />
+        </div>
 
-	}
-
-	useEffect(() => {
-		loadMessage()
-	}, [])
-
-	return (
-		<div className="text-center mt-5">
-			<h1 className="display-4">Hello Rigo!!</h1>
-			<p className="lead">
-				<img src={rigoImageUrl} className="img-fluid rounded-circle mb-3" alt="Rigo Baby" />
-			</p>
-			<div className="alert alert-info">
-				{store.message ? (
-					<span>{store.message}</span>
-				) : (
-					<span className="text-danger">
-						Loading message from the backend (make sure your python 🐍 backend is running)...
-					</span>
-				)}
-			</div>
-		</div>
-	);
-}; 
+        <div className="text-center mt-5">
+          <button 
+            className="btn btn-primary btn-lg"
+            onClick={() => navigate("/add-note")}
+          >
+            <i className="fas fa-plus me-2"></i>
+            Add a New Note!
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+};
