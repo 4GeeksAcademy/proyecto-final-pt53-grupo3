@@ -5,6 +5,36 @@ export const Profile = () => {
  const { store, dispatch } = useGlobalReducer();
  const [userNotes, setUserNotes] = useState([]);
  const [loading, setLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState(null);
+
+
+ // Función para obtener la información del perfil del usuario
+  const fetchUserProfile = async () => {
+   try {
+     const token = localStorage.getItem('token');
+     if (!token) {
+       console.error('No token found');
+       return;
+     }
+
+     const response = await fetch(process.env.BACKEND_URL + '/api/profile', {
+       method: 'GET',
+       headers: {
+         'Authorization': `Bearer ${token}`,
+         'Content-Type': 'application/json'
+       }
+     });
+
+     if (response.ok) {
+       const profile = await response.json();
+       setUserProfile(profile);
+     } else {
+       console.error('Error fetching user profile:', response.statusText);
+     }
+   } catch (error) {
+     console.error('Error fetching user profile:', error);
+   }
+ };
 
  // Función para obtener las notas del usuario
  const fetchUserNotes = async () => {
@@ -38,6 +68,7 @@ export const Profile = () => {
 
  // Cargar las notas cuando el componente se monta
  useEffect(() => {
+    fetchUserProfile();
    fetchUserNotes();
  }, []);
 
@@ -102,8 +133,8 @@ export const Profile = () => {
                         />
                       </div>
                       <div className="mt-3">
-                        <h4 className="mb-1">Usuario</h4>
-                        <p className="text-muted small">Perfil</p>
+                        <h4 className="mb-1">{userProfile ? userProfile.username : 'Cargando...'}</h4>
+                        <p className="text-muted">{userProfile ? `${userProfile.first_name} ${userProfile.last_name}` : 'Perfil'}</p>
                       </div>
                     </div>
                   </div>
@@ -132,8 +163,10 @@ export const Profile = () => {
                   </div>
                 </div>
 
+
                 {/* Notas del usuario */}
-                <div className="row mt-5 justify-content-center">
+                <div className="row mt-5 justify-content-center"
+                link= "/Layout">
                   {loading ? (
                     <div className="col-12 text-center">
                       <p>Cargando notas...</p>
@@ -168,6 +201,9 @@ export const Profile = () => {
                     ))
                   )}
                 </div>
+
+
+
               </div>
             </div>
           </div>
