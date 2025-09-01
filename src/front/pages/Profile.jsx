@@ -1,7 +1,45 @@
+import { useState, useEffect } from "react";
 import useGlobalReducer from "../hooks/useGlobalReducer.jsx";
 
 export const Profile = () => {
- const { store, dispatch } = useGlobalReducer()
+ const { store, dispatch } = useGlobalReducer();
+ const [userNotes, setUserNotes] = useState([]);
+ const [loading, setLoading] = useState(true);
+
+ // Función para obtener las notas del usuario
+ const fetchUserNotes = async () => {
+   try {
+     const token = localStorage.getItem('token');
+     if (!token) {
+       console.error('No token found');
+       return;
+     }
+
+     const response = await fetch(process.env.BACKEND_URL + '/api/profile/notes', {
+       method: 'GET',
+       headers: {
+         'Authorization': `Bearer ${token}`,
+         'Content-Type': 'application/json'
+       }
+     });
+
+     if (response.ok) {
+       const notes = await response.json();
+       setUserNotes(notes);
+     } else {
+       console.error('Error fetching user notes:', response.statusText);
+     }
+   } catch (error) {
+     console.error('Error fetching user notes:', error);
+   } finally {
+     setLoading(false);
+   }
+ };
+
+ // Cargar las notas cuando el componente se monta
+ useEffect(() => {
+   fetchUserNotes();
+ }, []);
 
   return (
     <>
@@ -94,69 +132,41 @@ export const Profile = () => {
                   </div>
                 </div>
 
-                {/* Editar para conectar con notes*/}
+                {/* Notas del usuario */}
                 <div className="row mt-5 justify-content-center">
-                  <div className="col-lg-4 col-md-6 mb-4 d-flex justify-content-center">
-                    <div
-                      className="card h-100"
-                      style={{ width: "100%", maxWidth: "24rem" }}
-                    >
-                      <div className="card-body d-flex flex-column">
-                        <h5 className="card-title">My Skibidi</h5>
-                        <h6 className="card-subtitle mb-3 text-body-secondary">
-                          Sigma
-                        </h6>
-                        <p className="card-text flex-grow-1">
-                        Sigmasious 16 plus waoooo
-                        </p>
-                        <div className="mt-auto">
-                        <a href="#" class="btn btn-primary">BupBup</a>
+                  {loading ? (
+                    <div className="col-12 text-center">
+                      <p>Cargando notas...</p>
+                    </div>
+                  ) : userNotes.length === 0 ? (
+                    <div className="col-12 text-center">
+                      <p>Aqui van tus notas!</p>
+                    </div>
+                  ) : (
+                    userNotes.map((note) => (
+                      <div key={note.note_id} className="col-lg-4 col-md-6 mb-4 d-flex justify-content-center">
+                        <div
+                          className="card h-100"
+                          style={{ width: "100%", maxWidth: "24rem" }}
+                        >
+                          <div className="card-body d-flex flex-column">
+                            <h5 className="card-title">{note.title}</h5>
+                            <h6 className="card-subtitle mb-3 text-body-secondary">
+                              {note.created_at ? new Date(note.created_at).toLocaleDateString() : 'Sin fecha'}
+                            </h6>
+                            <p className="card-text flex-grow-1">
+                              {note.content.length > 100 
+                                ? `${note.content.substring(0, 100)}...` 
+                                : note.content}
+                            </p>
+                            <div className="mt-auto">
+                              <a href="#" className="btn btn-primary">Ver más</a>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="col-lg-4 col-md-6 mb-4 d-flex justify-content-center">
-                    <div
-                      className="card h-100"
-                      style={{ width: "100%", maxWidth: "24rem" }}
-                    >
-                      <div className="card-body d-flex flex-column">
-                        <h5 className="card-title">My Skibidi</h5>
-                        <h6 className="card-subtitle mb-3 text-body-secondary">
-                          Sigma
-                        </h6>
-                        <p className="card-text flex-grow-1">
-                        Sigmasious 16 plus waoooo
-                        </p>
-                        <div className="mt-auto">
-                        <a href="#" class="btn btn-primary">BupBup</a>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="col-lg-4 col-md-6 mb-4 d-flex justify-content-center">
-                    <div
-                      className="card h-100"
-                      style={{ width: "100%", maxWidth: "24rem" }}
-                    >
-                      <div className="card-body d-flex flex-column">
-                        <h5 className="card-title">My Skibidi</h5>
-                        <h6 className="card-subtitle mb-3 text-body-secondary">
-                          Sigma
-                        </h6>
-                        <p className="card-text flex-grow-1">
-                          Sigmasious 16 plus waoooo
-                        </p>
-                        <div className="mt-auto">
-                        <a href="#" class="btn btn-primary">BupBup</a>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  
+                    ))
+                  )}
                 </div>
               </div>
             </div>
