@@ -5,44 +5,54 @@ from flask_bcrypt import Bcrypt
 from flask_swagger import swagger
 from api.utils import APIException, generate_sitemap
 from api.models import db
-from api.routes import api
+
+
 from api.admin import setup_admin
 from api.commands import setup_commands
-from api.routes import bcrypt
-
-# from models import Person
+from flask_jwt_extended import JWTManager
+from flask_cors import CORS
 
 ENV = "development" if os.getenv("FLASK_DEBUG") == "1" else "production"
-static_file_dir = os.path.join(os.path.dirname(
-    os.path.realpath(__file__)), '../dist/')
+static_file_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../dist/')
 app = Flask(__name__)
 app.url_map.strict_slashes = False
-bcrypt.init_app(app)
 
-# database condiguration
+# Permite CORS
+CORS(app)
+
+# Configuración de la base de datos
 db_url = os.getenv("DATABASE_URL")
 if db_url is not None:
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_url.replace(
-        "postgres://", "postgresql://")
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url.replace("postgres://", "postgresql://")
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:////tmp/test.db"
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 MIGRATE = Migrate(app, db, compare_type=True)
 db.init_app(app)
-app.config["SECRET_KEY"]= os.getenv("SECRET_KEY")
 
-# add the admin
+
+from api.routes import api, bcrypt
+
+# Inicializa bcrypt con la app
+bcrypt.init_app(app)
+
+# --- CORRECCIÓN DE ORDEN EN LA CONFIGURACIÓN DE JWT ---
+# 1. PRIMERO, define TODA la configuración para JWT.
+app.config["JWT_SECRET_KEY"] = "clave-de-prueba-simple-sin-caracteres-raros"
+app.config["JWT_CSRF_PROTECTION"] = False
+
+# 2. SEGUNDO, inicializa JWTManager DESPUÉS de haber definido la configuración.
+jwt = JWTManager(app)
+ 
+# Setup admin y commands
 setup_admin(app)
-
-# add the admin
 setup_commands(app)
 
-# Add all endpoints form the API with a "api" prefix
+# Registra el blueprint de la API
 app.register_blueprint(api, url_prefix='/api')
 
 # Handle/serialize errors like a JSON object
-
 
 @app.errorhandler(APIException)
 def handle_invalid_usage(error):
@@ -58,6 +68,8 @@ def sitemap():
     return send_from_directory(static_file_dir, 'index.html')
 
 # any other endpoint will try to serve it like a static file
+
+
 @app.route('/<path:path>', methods=['GET'])
 def serve_any_other_file(path):
     if not os.path.isfile(os.path.join(static_file_dir, path)):
