@@ -7,7 +7,7 @@ export const Home = () => {
   const [error, setError] = useState(null);
 
   {/* Si hay errores de Fetch, cambien el BackendUrl al de su puerto y deberia solucionarse */}
-  const backendUrl = "https://probable-trout-r4wwrjwvrpxxc5g7q-3001.app.github.dev/";
+  const backendUrl = "https://laughing-waddle-q7669w6g9pqjfxpv6-3001.app.github.dev/";
 
   useEffect(() => {
     fetchNotes();
