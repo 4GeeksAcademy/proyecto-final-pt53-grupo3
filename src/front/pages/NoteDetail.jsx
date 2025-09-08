@@ -7,6 +7,7 @@ const NoteDetail = () => {
   const [comments, setComments] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [userVotes, setUserVotes] = useState({});
 
   // Estados para la edición de comentarios 
   const [editingCommentId, setEditingCommentId] = useState(null);
@@ -19,6 +20,7 @@ const NoteDetail = () => {
   // Se usa una URL de backend hardcodeada para evitar el error de import.meta.env
   // Asegúrate de que esta URL sea la correcta para tu servidor backend.
   const API_URL = "https://laughing-waddle-q7669w6g9pqjfxpv6-3001.app.github.dev/";
+  const API_URL = "https://glorious-cod-5g5ggj5wjj7whv5qp-3001.app.github.dev/";
 
   // Función para obtener los comentarios 
   const fetchComments = async () => {
@@ -27,6 +29,22 @@ const NoteDetail = () => {
       if (response.ok) {
         const data = await response.json();
         setComments(data.reverse());
+        
+        // Obtener votos del usuario para los comentarios
+        const token = localStorage.getItem("token");
+        if (token) {
+          const votePromises = data.map(comment => 
+            getUserVoteForComment(comment.comment_id)
+          );
+          
+          const votes = await Promise.all(votePromises);
+          const votesMap = {};
+          data.forEach((comment, index) => {
+            votesMap[comment.comment_id] = votes[index];
+          });
+          
+          setUserVotes(prev => ({...prev, ...votesMap}));
+        }
       } else {
         console.error("Error al obtener los comentarios.");
       }
@@ -42,6 +60,13 @@ const NoteDetail = () => {
       if (response.ok) {
         const data = await response.json();
         setNote(data);
+        
+        // Obtener voto del usuario para la nota
+        const token = localStorage.getItem("token");
+        if (token) {
+          const userVote = await getUserVoteForNote(id);
+          setUserVotes(prev => ({...prev, [id]: userVote}));
+        }
       } else {
         console.error("Error al obtener la nota.");
         setNote(null);
@@ -49,6 +74,52 @@ const NoteDetail = () => {
     } catch (error) {
       console.error("Error en la conexión:", error);
       setNote(null);
+    }
+  };
+
+  // Función para obtener el voto del usuario para una nota
+  const getUserVoteForNote = async (noteId) => {
+    const token = localStorage.getItem("token");
+    if (!token) return 0;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/votes/my-vote?note_id=${noteId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data.vote_type;
+      }
+      return 0;
+    } catch (error) {
+      console.error("Error obteniendo voto:", error);
+      return 0;
+    }
+  };
+
+  // Función para obtener el voto del usuario para un comentario
+  const getUserVoteForComment = async (commentId) => {
+    const token = localStorage.getItem("token");
+    if (!token) return 0;
+    
+    try {
+      const response = await fetch(`${API_URL}/api/votes/my-vote?comment_id=${commentId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data.vote_type;
+      }
+      return 0;
+    } catch (error) {
+      console.error("Error obteniendo voto:", error);
+      return 0;
     }
   };
 
@@ -74,6 +145,50 @@ const NoteDetail = () => {
     } catch (error) {
       console.error("Error de conexión:", error);
       setCurrentUser(null);
+    }
+  };
+
+  // Función para manejar el voto
+  const handleVote = async (elementId, voteType, isNote = true) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Debes iniciar sesión para votar");
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/api/vote`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          [isNote ? 'note_id' : 'comment_id']: elementId,
+          vote_type: voteType
+        })
+      });
+      
+      if (response.ok) {
+        // Actualizar el estado local del voto
+        setUserVotes(prev => ({
+          ...prev,
+          [elementId]: userVotes[elementId] === voteType ? 0 : voteType
+        }));
+        
+        // Recargar la nota y comentarios para actualizar los contadores
+        if (isNote) {
+          fetchNote();
+        } else {
+          fetchComments();
+        }
+      } else {
+        const errorData = await response.json();
+        alert(`Error al votar: ${errorData.msg}`);
+      }
+    } catch (error) {
+      console.error("Error en la conexión:", error);
+      alert("Ocurrió un error inesperado al votar");
     }
   };
 
@@ -271,7 +386,7 @@ const NoteDetail = () => {
 
   // Función para obtener el ID del usuario del token 
   const getCurrentUserId = () => {
-    const token = localStorage.getItem("token"); // 🐛 CORRECCIÓN
+    const token = localStorage.getItem("token");
     if (!token) return null;
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
@@ -303,6 +418,28 @@ const NoteDetail = () => {
           </p>
         )}
         <p className="m-2">{note.content}</p>
+        
+        {/* Botones de votación para la nota */}
+        <div className="d-flex gap-2 mb-3 ms-2">
+          <button 
+            className={`btn btn-sm ${userVotes[id] === 1 ? 'btn-success' : 'btn-outline-success'}`}
+            onClick={() => handleVote(id, 1, true)}
+            title="Votar positivamente"
+          >
+            <i className="fas fa-thumbs-up"></i>
+            <span className="ms-1">{note.positive_votes || 0}</span>
+          </button>
+          
+          <button 
+            className={`btn btn-sm ${userVotes[id] === -1 ? 'btn-danger' : 'btn-outline-danger'}`}
+            onClick={() => handleVote(id, -1, true)}
+            title="Votar negativamente"
+          >
+            <i className="fas fa-thumbs-down"></i>
+            <span className="ms-1">{note.negative_votes || 0}</span>
+          </button>
+        </div>
+        
         <div className="d-flex justify-content-end">
           {note.tags && note.tags.map(tag => (
             <button key={tag.tag_id} type="button" className="btn btn-outline-primary m-1">
@@ -310,6 +447,7 @@ const NoteDetail = () => {
             </button>
           ))}
         </div>
+        
         <div className="mb-3">
           <label htmlFor="exampleFormControlTextarea1" className="form-label">
             <strong>Agregar un comentario</strong>
@@ -326,6 +464,7 @@ const NoteDetail = () => {
             Publicar
           </button>
         </div>
+        
         <div>
           <p className="text-center"> Comentarios ({comments.length})</p>
           {comments.map((comment) => (
@@ -335,24 +474,44 @@ const NoteDetail = () => {
                   <h6 className="card-subtitle text-muted ">
                     {comment.first_name} {comment.last_name} (@{comment.username})
                   </h6>
-                  {/* Botones de editar y eliminar */}
-                  {isCommentAuthor(comment.user_id) && (
-                    <div className="btn-group">
-                      {editingCommentId !== comment.comment_id && (
-                        <>
-                          <button
-                            className="btn btn-sm btn-outline-primary"
-                            onClick={() => handleEditComment(comment.comment_id, comment.content)}
-                          >Editar</button>
-                          <button
-                            className="btn btn-sm btn-outline-danger"
-                            onClick={() => handleDeleteComment(comment.comment_id)}
-                          >Eliminar</button>
-                        </>
-                      )}
-                    </div>
-                  )}
+                  
+                  {/* Botones de votación para comentarios */}
+                  <div className="d-flex gap-1 me-2">
+                    <button 
+                      className={`btn btn-sm ${userVotes[comment.comment_id] === 1 ? 'btn-success' : 'btn-outline-success'}`}
+                      onClick={() => handleVote(comment.comment_id, 1, false)}
+                      title="Votar positivamente"
+                    >
+                      <i className="fas fa-thumbs-up"></i>
+                    </button>
+                    
+                    <button 
+                      className={`btn btn-sm ${userVotes[comment.comment_id] === -1 ? 'btn-danger' : 'btn-outline-danger'}`}
+                      onClick={() => handleVote(comment.comment_id, -1, false)}
+                      title="Votar negativamente"
+                    >
+                      <i className="fas fa-thumbs-down"></i>
+                    </button>
+                  </div>
                 </div>
+
+                {/* Botones de editar y eliminar */}
+                {isCommentAuthor(comment.user_id) && (
+                  <div className="btn-group mb-2">
+                    {editingCommentId !== comment.comment_id && (
+                      <>
+                        <button
+                          className="btn btn-sm btn-outline-primary"
+                          onClick={() => handleEditComment(comment.comment_id, comment.content)}
+                        >Editar</button>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => handleDeleteComment(comment.comment_id)}
+                        >Eliminar</button>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {editingCommentId === comment.comment_id ? (
                   <>

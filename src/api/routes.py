@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, url_for, Blueprint
-from api.models import db, User, Notes, Tags, Comments
+from api.models import db, User, Notes, Tags, Comments, Votes
 from api.utils import generate_sitemap, APIException
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
@@ -10,9 +10,7 @@ import datetime
 api = Blueprint('api', __name__)
 bcrypt = Bcrypt()
 
-
 CORS(api)
-
 
 @api.route('/hello', methods=['POST', 'GET'])
 def handle_hello():
@@ -20,7 +18,6 @@ def handle_hello():
         "message": "Hello! I'm a message that came from the backend, check the network tab on the google inspector and you will see the GET request"
     }
     return jsonify(response_body), 200
-
 
 # PAULO Endpoint para ver todos los tags
 @api.route('/tags', methods=['GET'])
@@ -37,9 +34,25 @@ def get_tags():
 # PAULO Endpoint para obtener todas las notas
 @api.route('/notes', methods=['GET'])
 def get_notes():
-    all_notes = Notes.query.all()
-    serialized_notes = [note.serialize() for note in all_notes]
+    try:
+        all_notes = Notes.query.all()
+        serialized_notes = [note.serialize() for note in all_notes]
+        return jsonify(serialized_notes), 200
+        
+    except Exception as e:
+        print(f"Error en get_notes: {str(e)}")
+        return jsonify({"msg": f"Error interno del servidor: {str(e)}"}), 500
 
+@api.route('/notes/search', methods=['GET'])
+def search_notes_by_tag():
+    tag_query = request.args.get('tag', '').strip()
+    
+    # Buscar notas que contengan el tag especificado
+    notes_with_tag = Notes.query.join(Notes.tags).filter(
+        Tags.name.ilike(f'%{tag_query}%')
+    ).distinct().all()
+    
+    serialized_notes = [note.serialize() for note in notes_with_tag]
     return jsonify(serialized_notes), 200
 
 # PAULO Endpoint para obtener todos los comentarios de una nota
@@ -191,7 +204,6 @@ def create_comment(note_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Ocurrió un error inesperado: {str(e)}"}), 500
-
 
 # MAIN Endpoint para perfil (ahora incluye la bio)
 @api.route('/profile', methods=['GET'])
@@ -353,3 +365,103 @@ def delete_note(note_id):
         # si hay errores nos vamos a 0 para evitar que la informacion se quede en el aire
         db.session.rollback()
         return jsonify({"msg": f"Ocurrió un error inesperado: {str(e)}"}), 500
+
+# NUEVO ENDPOINT: Para votar en notas y comentarios
+@api.route('/vote', methods=['POST'])
+@jwt_required()
+def create_vote():
+    current_user_id = get_jwt_identity()
+    body = request.get_json()
+    
+    note_id = body.get('note_id')
+    comment_id = body.get('comment_id')
+    vote_type = body.get('vote_type')  # 1 para positivo, -1 para negativo
+    
+    # Validar que se vote solo en una cosa a la vez
+    if not ((note_id and not comment_id) or (comment_id and not note_id)):
+        return jsonify({"msg": "Debes votar en una nota o un comentario, no en ambos"}), 400
+    
+    if vote_type not in [1, -1]:
+        return jsonify({"msg": "Tipo de voto inválido"}), 400
+    
+    # Buscar si ya existe un voto de este usuario
+    if note_id:
+        existing_vote = Votes.query.filter_by(
+            user_id=current_user_id, 
+            note_id=note_id
+        ).first()
+    else:
+        existing_vote = Votes.query.filter_by(
+            user_id=current_user_id, 
+            comment_id=comment_id
+        ).first()
+    
+    if existing_vote:
+        # Si el voto es del mismo tipo, no permitimos votar de nuevo
+        if existing_vote.vote_type == vote_type:
+            return jsonify({"msg": "Ya has votado de esta forma"}), 400
+        else:
+            # Si es diferente tipo, lo actualizamos
+            existing_vote.vote_type = vote_type
+            db.session.commit()
+            return jsonify({"msg": "Voto actualizado", "action": "updated"}), 200
+    else:
+        # Crear nuevo voto
+        new_vote = Votes(
+            user_id=current_user_id,
+            note_id=note_id,
+            comment_id=comment_id,
+            vote_type=vote_type
+        )
+        db.session.add(new_vote)
+        db.session.commit()
+        return jsonify({"msg": "Voto registrado", "action": "added"}), 201
+
+# NUEVO ENDPOINT: Obtener conteo de votos para un elemento
+@api.route('/votes/count', methods=['GET'])
+def get_votes_count():
+    note_id = request.args.get('note_id')
+    comment_id = request.args.get('comment_id')
+    
+    if not note_id and not comment_id:
+        return jsonify({"msg": "Se requiere note_id o comment_id"}), 400
+    
+    if note_id:
+        positive_votes = Votes.query.filter_by(note_id=note_id, vote_type=1).count()
+        negative_votes = Votes.query.filter_by(note_id=note_id, vote_type=-1).count()
+    else:
+        positive_votes = Votes.query.filter_by(comment_id=comment_id, vote_type=1).count()
+        negative_votes = Votes.query.filter_by(comment_id=comment_id, vote_type=-1).count()
+    
+    return jsonify({
+        "positive_votes": positive_votes,
+        "negative_votes": negative_votes,
+        "total_votes": positive_votes - negative_votes
+    }), 200
+
+# NUEVO ENDPOINT: Obtener el voto del usuario actual
+@api.route('/votes/my-vote', methods=['GET'])
+@jwt_required()
+def get_my_vote():
+    current_user_id = get_jwt_identity()
+    note_id = request.args.get('note_id')
+    comment_id = request.args.get('comment_id')
+    
+    if not note_id and not comment_id:
+        return jsonify({"msg": "Se requiere note_id o comment_id"}), 400
+    
+    if note_id:
+        vote = Votes.query.filter_by(
+            user_id=current_user_id, 
+            note_id=note_id
+        ).first()
+    else:
+        vote = Votes.query.filter_by(
+            user_id=current_user_id, 
+            comment_id=comment_id
+        ).first()
+    
+    if vote:
+        return jsonify({"vote_type": vote.vote_type}), 200
+    else:
+        return jsonify({"vote_type": 0}), 200

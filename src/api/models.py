@@ -81,6 +81,10 @@ class Notes(db.Model):
     )
 
     def serialize(self):
+        # Obtener contadores de votos - CORREGIDO (sin import circular)
+        positive_votes = sum(1 for vote in self.votes if vote.vote_type == 1)
+        negative_votes = sum(1 for vote in self.votes if vote.vote_type == -1)
+        
         # Esta es la parte que valida si la nota es anónima o no
         user_info = None
         if not self.is_anonymous:
@@ -105,9 +109,11 @@ class Notes(db.Model):
             "reports": [report.serialize() for report in self.reports],
             "favorited_by": [fav.serialize() for fav in self.favorited_by],
             "votes": [vote.serialize() for vote in self.votes],
-            "user": user_info
+            "user_info": user_info,
+            "positive_votes": positive_votes,
+            "negative_votes": negative_votes,
+            "comments_count": len(self.comments)
         }
-
 
 class Comments (db.Model):
     comment_id: Mapped[int] = mapped_column(primary_key=True)
@@ -193,8 +199,7 @@ class UserNoteFavorites(db.Model):
 
 
 class Votes(db.Model):
-    vote_id: Mapped[int] = mapped_column(
-        primary_key=True)  # Es mejor tener un ID único
+    vote_id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
     # Un voto puede ser para una nota O un comentario
     note_id: Mapped[int] = mapped_column(
@@ -203,3 +208,12 @@ class Votes(db.Model):
         ForeignKey("comments.comment_id"), nullable=True)
     # 1 para voto positivo, -1 para negativo
     vote_type: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    def serialize(self):
+        return {
+            "vote_id": self.vote_id,
+            "user_id": self.user_id,
+            "note_id": self.note_id,
+            "comment_id": self.comment_id,
+            "vote_type": self.vote_type
+        }
