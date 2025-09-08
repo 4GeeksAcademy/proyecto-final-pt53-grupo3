@@ -115,7 +115,7 @@ export const NewNote = () => {
   };
 
   return (
-    <div className="container">
+    <div className="">
       <button
         type="button"
         className="btn btn-primary"
