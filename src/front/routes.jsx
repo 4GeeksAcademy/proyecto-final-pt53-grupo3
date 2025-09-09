@@ -11,6 +11,7 @@ import NoteDetail from "./pages/NoteDetail";
 import RegisterForm from "./pages/RegisterForm";
 import LoginForm from "./pages/LoginForm";
 import Profile from "./pages/Profile"; // ✅ Importación corregida
+import Favorites from "./pages/Favorites";
 
 export const router = createBrowserRouter(
 
@@ -32,6 +33,7 @@ export const router = createBrowserRouter(
         <Route path="/RegisterForm" element={<RegisterForm />} />
         <Route path="/login" element={<LoginForm />} />
         <Route path="/noteDetail/:id" element={<NoteDetail />} /> {/* ⚡ Corregido */}
+        <Route path="/favorites" element={<Favorites />}/>
         </Route>
     )
 

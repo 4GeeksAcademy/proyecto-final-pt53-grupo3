@@ -6,6 +6,9 @@ from flask_bcrypt import Bcrypt
 from flask_jwt_extended import create_access_token
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import datetime
+from api.models import UserNoteFavorites
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 
 api = Blueprint('api', __name__)
 bcrypt = Bcrypt()
@@ -465,3 +468,96 @@ def get_my_vote():
         return jsonify({"vote_type": vote.vote_type}), 200
     else:
         return jsonify({"vote_type": 0}), 200
+    
+
+
+ #----------------------- rutas para lista de favoritos
+
+# Agregar nota a favoritos
+@api.route('/favorites/<int:note_id>', methods=['POST'])
+@jwt_required()
+def add_favorite(note_id):
+    current_user_id = get_jwt_identity()
+    favorite = UserNoteFavorites.query.filter_by(user_id=current_user_id, note_id=note_id).first()
+    if favorite:
+        return jsonify({"msg": "Nota ya está en favoritos"}), 400
+
+    note = Notes.query.get(note_id)
+    if note is None:
+        return jsonify({"msg": "Nota no encontrada"}), 404
+
+    new_fav = UserNoteFavorites(user_id=current_user_id, note_id=note_id)
+    db.session.add(new_fav)
+    try:
+        db.session.commit()
+        return jsonify({"msg": "Nota agregada a favoritos"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": f"Error interno: {str(e)}"}), 500
+
+# Eliminar nota de favoritos
+@api.route('/favorites/<int:note_id>', methods=['DELETE'])
+@jwt_required()
+def remove_favorite(note_id):
+    current_user_id = get_jwt_identity()
+    favorite = UserNoteFavorites.query.filter_by(user_id=current_user_id, note_id=note_id).first()
+
+    if favorite is None:
+        return jsonify({"msg": "Nota no está en favoritos"}), 404
+
+    db.session.delete(favorite)
+    try:
+        db.session.commit()
+        return jsonify({"msg": "Nota removida de favoritos"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": f"Error interno: {str(e)}"}), 500
+
+# Obtener lista de notas favoritas del usuario
+@api.route('/favorites', methods=['GET'])
+@jwt_required()
+def get_favorites():
+    current_user_id = get_jwt_identity()
+    favorites = UserNoteFavorites.query.filter_by(user_id=current_user_id).all()
+
+    notes = []
+    for fav in favorites:
+        note = Notes.query.get(fav.note_id)
+        if note:
+            notes.append(note.serialize())
+
+    return jsonify(notes), 200
+
+
+    #------------------ api de google
+
+@api.route('/google-login', methods=['POST'])
+def google_login():
+    data = request.get_json()
+    token = data.get("token")
+
+    try:
+        idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), "413075624594-02qpect45v5o3uarjnkr42ldob11s4lk.apps.googleusercontent.com")
+        email = idinfo['email']
+        first_name = idinfo.get('given_name', '')
+        last_name = idinfo.get('family_name', '')
+
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            # Crear usuario si no existe
+            user = User(
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                username=email.split('@')[0],
+                password_hash="",  # vacío porque no se usará
+                is_active=True
+            )
+            db.session.add(user)
+            db.session.commit()
+
+        access_token = create_access_token(identity=str(user.id))
+        return jsonify(access_token=access_token), 200
+
+    except ValueError:
+        return jsonify({"error": "Token inválido"}), 400

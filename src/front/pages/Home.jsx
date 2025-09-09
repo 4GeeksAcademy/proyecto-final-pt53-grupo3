@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import useGlobalReducer from "../hooks/useGlobalReducer";
 
 export const Home = () => {
+  // Estado global y acciones para favoritos
+  const { store, actions } = useGlobalReducer();
+
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -9,12 +13,20 @@ export const Home = () => {
   const [sortOption, setSortOption] = useState("recent"); // 'recent', 'voted', 'commented'
   const navigate = useNavigate();
 
+
   {/* Si hay errores de Fetch, cambien el BackendUrl al de su puerto y deberia solucionarse */}
   const backendUrl = "https://laughing-waddle-q7669w6g9pqjfxpv6-3001.app.github.dev/";
 
 
+
   useEffect(() => {
     fetchNotes();
+
+    // Al montar el componente, cargar favoritos del usuario
+    if (localStorage.getItem("token")) {
+      actions.getFavorites();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleTokenExpired = () => {
@@ -26,28 +38,28 @@ export const Home = () => {
   const fetchNotes = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${backendUrl}api/notes`);
-      
+      const response = await fetch(`${backendUrl}/api/notes`);
+
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       setNotes(data);
 
       const token = localStorage.getItem("token");
       if (token) {
         try {
-          const votePromises = data.map(note => 
+          const votePromises = data.map(note =>
             getUserVoteForNote(note.note_id || note.id)
           );
-          
+
           const votes = await Promise.all(votePromises);
           const votesMap = {};
           data.forEach((note, index) => {
             votesMap[note.note_id || note.id] = votes[index];
           });
-          
+
           setUserVotes(votesMap);
         } catch (voteError) {
           console.error("Error obteniendo votos:", voteError);
@@ -65,19 +77,19 @@ export const Home = () => {
   const getUserVoteForNote = async (noteId) => {
     const token = localStorage.getItem("token");
     if (!token) return 0;
-    
+
     try {
       const response = await fetch(`${backendUrl}api/votes/my-vote?note_id=${noteId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (response.status === 401) {
         handleTokenExpired();
         return 0;
       }
-      
+
       if (response.ok) {
         const data = await response.json();
         return data.vote_type;
@@ -96,7 +108,7 @@ export const Home = () => {
       navigate("/login");
       return;
     }
-    
+
     try {
       const response = await fetch(`${backendUrl}api/vote`, {
         method: 'POST',
@@ -109,27 +121,27 @@ export const Home = () => {
           vote_type: voteType
         })
       });
-      
+
       if (response.status === 401) {
         localStorage.removeItem("token");
         alert("Tu sesión ha expirado. Por favor inicia sesión nuevamente.");
         navigate("/login");
         return;
       }
-      
+
       if (response.ok) {
         setUserVotes(prev => ({
           ...prev,
           [noteId]: prev[noteId] === voteType ? 0 : voteType
         }));
-        
-        setNotes(prevNotes => 
+
+        setNotes(prevNotes =>
           prevNotes.map(note => {
             if (note.note_id === noteId || note.id === noteId) {
               const currentPositive = note.positive_votes || 0;
               const currentNegative = note.negative_votes || 0;
               const currentUserVote = userVotes[noteId] || 0;
-              
+
               if (currentUserVote === voteType) {
                 return {
                   ...note,
@@ -163,6 +175,30 @@ export const Home = () => {
     }
   };
 
+  // --- FAVORITOS ---
+  const isNoteFavorited = (noteId) => {
+    return store.favorites.some(fav => (fav.note_id || fav.id) === noteId);
+  };
+
+  const toggleFavorite = async (note) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Debes iniciar sesión para gestionar favoritos");
+      navigate("/login");
+      return;
+    }
+
+    const noteId = note.note_id || note.id;
+
+    if (isNoteFavorited(noteId)) {
+      // Quitar de favoritos
+      await actions.removeFavorite(noteId);
+    } else {
+      // Agregar a favoritos
+      await actions.addFavorite(noteId);
+    }
+  };
+
   const truncateText = (text, maxLength = 150) => {
     if (!text) return "";
     if (text.length <= maxLength) return text;
@@ -171,22 +207,22 @@ export const Home = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return "Fecha no disponible";
-    
+
     try {
       const date = new Date(dateString);
-      
+
       if (isNaN(date.getTime())) return "Fecha inválida";
-      
+
       const day = date.getDate();
       const month = date.getMonth() + 1;
       const hours = date.getHours();
       const minutes = date.getMinutes();
-      
+
       const formattedDay = day < 10 ? `0${day}` : day;
       const formattedMonth = month < 10 ? `0${month}` : month;
       const formattedHours = hours < 10 ? `0${hours}` : hours;
       const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
-      
+
       return `${formattedDay}/${formattedMonth} ${formattedHours}:${formattedMinutes}`;
     } catch (error) {
       console.error("Error formateando fecha:", error);
@@ -284,8 +320,8 @@ export const Home = () => {
         <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
           {sortedNotes.map((note) => (
             <div key={note.note_id || note.id} className="col">
-              <div className="card h-100 shadow-sm">
-                <div className="card-body">
+              <div className="card h-100 shadow-sm d-flex flex-column">
+                <div className="card-body d-flex flex-column">
                   <div className="d-flex justify-content-between align-items-start mb-2">
                     <h5 className="card-title text-truncate" title={note.title}>
                       {note.title || "Sin título"}
@@ -318,32 +354,43 @@ export const Home = () => {
                       <i className="fas fa-clock me-1"></i>
                       {formatDate(note.created_at || note.date)}
                     </small>
-                    
+
                     {note.user && !note.is_anonymous && (
                       <div className="mt-1">
                         <small className="text-muted">
                           <i className="fas fa-user me-1"></i>
-                          {note.user.username || 
-                           (note.user.first_name && note.user.last_name 
-                            ? `${note.user.first_name} ${note.user.last_name}` 
-                            : 'Usuario')}
+                          {note.user.username ||
+                            (note.user.first_name && note.user.last_name
+                              ? `${note.user.first_name} ${note.user.last_name}`
+                              : 'Usuario')}
                         </small>
                       </div>
                     )}
                   </div>
                 </div>
 
+                {/* Footer con botones de acción */}
                 <div className="card-footer bg-transparent border-top-0">
                   <div className="d-flex justify-content-between align-items-center">
-                    <Link 
+                    <Link
                       to={`/noteDetail/${note.note_id || note.id}`}
                       className="btn btn-outline-primary btn-sm"
                     >
                       Leer más
                     </Link>
-                    
+
                     <div className="d-flex gap-2 align-items-center">
-                      <button 
+                      {/* Botón Favoritos */}
+                      <button
+                        className={`btn btn-sm ${isNoteFavorited(note.note_id || note.id) ? 'btn-warning' : 'btn-outline-warning'}`}
+                        onClick={() => toggleFavorite(note)}
+                        title={isNoteFavorited(note.note_id || note.id) ? "Quitar de favoritos" : "Agregar a favoritos"}
+                      >
+                        <i className="fas fa-star"></i>
+                      </button>
+
+                      {/* Botón Voto positivo */}
+                      <button
                         className={`btn btn-sm ${userVotes[note.note_id || note.id] === 1 ? 'btn-success' : 'btn-outline-success'}`}
                         onClick={() => handleVote(note.note_id || note.id, 1)}
                         title="Votar positivamente"
@@ -351,8 +398,9 @@ export const Home = () => {
                         <i className="fas fa-thumbs-up"></i>
                         <span className="ms-1">{note.positive_votes || 0}</span>
                       </button>
-                      
-                      <button 
+
+                      {/* Botón Voto negativo */}
+                      <button
                         className={`btn btn-sm ${userVotes[note.note_id || note.id] === -1 ? 'btn-danger' : 'btn-outline-danger'}`}
                         onClick={() => handleVote(note.note_id || note.id, -1)}
                         title="Votar negativamente"
@@ -360,7 +408,8 @@ export const Home = () => {
                         <i className="fas fa-thumbs-down"></i>
                         <span className="ms-1">{note.negative_votes || 0}</span>
                       </button>
-                      
+
+                      {/* Contador de comentarios */}
                       <small className="text-muted">
                         <i className="fas fa-comment me-1"></i>
                         {note.comments_count || 0}

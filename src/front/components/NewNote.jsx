@@ -115,14 +115,14 @@ export const NewNote = () => {
   };
 
   return (
-    <div className="container">
+    <div className="">
       <button
         type="button"
-        className="btn btn-primary"
+        className="btn btn-primary btn-sm"
         data-bs-toggle="modal"
         data-bs-target="#exampleModal"
       >
-        NEW NOTE!
+        New Note!
       </button>
 
       {/* Modal para crear una nota */}

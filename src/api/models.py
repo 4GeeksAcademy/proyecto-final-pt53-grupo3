@@ -196,6 +196,14 @@ class UserNoteFavorites(db.Model):
         ForeignKey("notes.note_id"), primary_key=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now())
+    
+    def serialize(self):
+        return {
+            "user_id": self.user_id,
+            "note_id": self.note_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "username": self.user.username if self.user else None
+        }
 
 
 class Votes(db.Model):

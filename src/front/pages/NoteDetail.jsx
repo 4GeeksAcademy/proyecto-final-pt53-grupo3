@@ -18,8 +18,10 @@ const NoteDetail = () => {
   const navigate = useNavigate();
 
   // Se usa una URL de backend hardcodeada para evitar el error de import.meta.env
+
   // Asegúrate de que esta URL sea la correcta para tu servidor backend.
   const API_URL = "https://laughing-waddle-q7669w6g9pqjfxpv6-3001.app.github.dev/";
+
 
   // Función para obtener los comentarios 
   const fetchComments = async () => {
