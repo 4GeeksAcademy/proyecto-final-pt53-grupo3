@@ -568,7 +568,7 @@ const Profile = () => {
                                 }
                               }}
                             >
-                              Guardar Imagen
+                              Seleccionar Imagen
                             </button>
                           )}
                         </div>
